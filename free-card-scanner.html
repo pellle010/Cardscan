@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>CardScan — Free</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f0e8;
+    --bg2: #ede8df;
+    --bg3: #e4ddd2;
+    --ink: #1a1510;
+    --ink2: #4a4035;
+    --ink3: #8a7a6a;
+    --accent: #c0391a;
+    --accent2: #e04a28;
+    --border: #c8bfb0;
+    --card: #faf7f2;
+    --success: #2a6a3a;
+    --radius: 12px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    padding-bottom: 60px;
+  }
+
+  /* Header */
+  header {
+    background: var(--ink);
+    color: var(--bg);
+    padding: 20px 20px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  header h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 28px;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  header h1 em {
+    font-style: italic;
+    color: #c87a5a;
+  }
+  .header-tag {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: #6a5a4a;
+    text-transform: uppercase;
+    border: 1px solid #3a2a1a;
+    padding: 3px 7px;
+    border-radius: 3px;
+  }
+
+  .container { max-width: 480px; margin: 0 auto; padding: 0 16px; }
+
+  /* Setup */
+  .setup-block {
+    margin: 16px 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .setup-toggle {
+    width: 100%; background: none; border: none;
+    padding: 13px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; font-family: 'DM Mono', monospace;
+    font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--ink2);
+  }
+  .setup-toggle .chevron { font-size: 18px; transition: transform 0.25s; }
+  .setup-toggle.open .chevron { transform: rotate(90deg); }
+  .setup-inner { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .setup-inner.hidden { display: none; }
+
+  label { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink3); display: block; margin-bottom: 5px; }
+
+  input[type="url"], input[type="text"] {
+    width: 100%; padding: 10px 12px;
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 8px; font-family: 'DM Mono', monospace;
+    font-size: 13px; color: var(--ink); outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus { border-color: var(--accent); }
+
+  .tip {
+    font-size: 11px; color: var(--ink3); line-height: 1.6;
+    background: var(--bg2); padding: 10px 12px; border-radius: 8px;
+    border-left: 3px solid var(--accent);
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    min-height: 180px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    cursor: pointer; background: var(--card);
+    overflow: hidden; margin-bottom: 14px;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .upload-zone:active { background: var(--bg2); border-color: var(--accent); }
+  .upload-zone img { width: 100%; display: block; border-radius: calc(var(--radius) - 2px); }
+  .upload-placeholder { text-align: center; padding: 28px; }
+  .upload-placeholder .icon { font-size: 48px; margin-bottom: 10px; }
+  .upload-placeholder p { color: var(--ink3); font-size: 13px; line-height: 1.5; }
+  .upload-placeholder small { color: #b0a090; font-size: 11px; display: block; margin-top: 5px; }
+  .change-hint {
+    position: absolute; bottom: 8px; right: 10px;
+    font-size: 10px; color: var(--ink3); letter-spacing: 0.1em;
+    background: rgba(245,240,232,0.9); padding: 3px 7px; border-radius: 4px;
+  }
+
+  /* Progress */
+  .progress-bar {
+    width: 100%; height: 4px;
+    background: var(--bg3); border-radius: 2px;
+    overflow: hidden; margin-bottom: 14px;
+    display: none;
+  }
+  .progress-bar.visible { display: block; }
+  .progress-fill {
+    height: 100%; background: var(--accent);
+    border-radius: 2px; transition: width 0.3s ease;
+    width: 0%;
+  }
+  .status-line {
+    font-size: 12px; color: var(--ink3); text-align: center;
+    margin-bottom: 12px; letter-spacing: 0.05em;
+    min-height: 18px;
+  }
+
+  /* Buttons */
+  .btn {
+    display: block; width: 100%;
+    padding: 15px 20px; border: none; border-radius: 10px;
+    font-family: 'DM Serif Display', serif; font-size: 17px;
+    cursor: pointer; transition: all 0.15s; letter-spacing: 0.01em;
+    margin-bottom: 12px;
+  }
+  .btn-scan {
+    background: var(--ink); color: var(--bg);
+  }
+  .btn-scan:active { background: #3a2a1a; }
+  .btn-scan:disabled { background: var(--ink3); cursor: not-allowed; }
+  .btn-save {
+    background: var(--accent); color: #fff;
+    flex: 1;
+  }
+  .btn-save:active { background: var(--accent2); }
+  .btn-clear {
+    background: var(--bg3); color: var(--ink2);
+    border: 1px solid var(--border);
+    flex: 0 0 auto; width: auto; padding: 15px 18px;
+    font-family: 'DM Mono', monospace; font-size: 15px;
+    margin-bottom: 0;
+  }
+  .btn-row { display: flex; gap: 10px; margin-bottom: 14px; }
+
+  /* Fields */
+  .fields-header {
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--ink3); margin-bottom: 12px;
+  }
+  .field-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 8px;
+  }
+  .field-label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink3); margin-bottom: 5px; }
+  .field-input {
+    background: none; border: none; outline: none;
+    font-family: 'DM Mono', monospace; font-size: 15px;
+    color: var(--ink); width: 100%;
+  }
+  .field-input::placeholder { color: var(--border); }
+
+  /* Alert */
+  .alert {
+    padding: 12px 14px; border-radius: 10px;
+    font-size: 13px; margin-bottom: 14px; line-height: 1.5;
+    display: none;
+  }
+  .alert.visible { display: block; }
+  .alert-success { background: #e8f5ec; border: 1px solid #a0d4b0; color: var(--success); }
+  .alert-error { background: #fdf0ee; border: 1px solid #e8b0a0; color: #a02010; }
+
+  /* History */
+  .history-section { margin-top: 28px; }
+  .history-header {
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--ink3); margin-bottom: 10px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .history-count {
+    background: var(--accent); color: #fff;
+    font-size: 10px; padding: 2px 7px; border-radius: 10px;
+  }
+  .history-item {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+  }
+  .history-name { font-size: 15px; color: var(--ink); font-family: 'DM Serif Display', serif; }
+  .history-sub { font-size: 11px; color: var(--ink3); margin-top: 3px; }
+  .history-email { font-size: 11px; color: var(--accent); margin-top: 3px; }
+
+  /* Instructions */
+  .instructions {
+    margin-top: 32px; background: var(--card);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px;
+  }
+  .instructions h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px; font-weight: 400; margin-bottom: 16px;
+    color: var(--ink);
+  }
+  .step { display: flex; gap: 14px; margin-bottom: 18px; }
+  .step-num {
+    min-width: 26px; height: 26px; border-radius: 50%;
+    background: var(--ink); color: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; flex-shrink: 0; margin-top: 2px;
+  }
+  .step-title { font-size: 13px; color: var(--ink); margin-bottom: 5px; }
+  .step-detail { font-size: 11px; color: var(--ink3); line-height: 1.7; }
+  .code-block {
+    background: var(--ink); color: #c8bfb0;
+    padding: 12px 14px; border-radius: 8px;
+    font-size: 11px; line-height: 1.7;
+    white-space: pre; overflow-x: auto;
+    margin-top: 6px;
+  }
+
+  .free-badge {
+    display: inline-block; background: #e8f5e0;
+    border: 1px solid #a0c080; color: #3a6020;
+    font-size: 10px; letter-spacing: 0.15em;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 4px;
+    margin-bottom: 14px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Card<em>Scan</em></h1>
+  <span class="header-tag">100% Free</span>
+</header>
+
+<div class="container">
+  <div style="margin-top: 14px;">
+    <span class="free-badge">✓ No API keys · No subscriptions · No cost</span>
+  </div>
+
+  <!-- Setup -->
+  <div class="setup-block">
+    <button class="setup-toggle" id="setupToggle" onclick="toggleSetup()">
+      <span>⚙ Setup</span>
+      <span class="chevron">›</span>
+    </button>
+    <div class="setup-inner hidden" id="setupInner">
+      <div>
+        <label>Google Apps Script URL</label>
+        <input type="url" id="sheetsUrl" placeholder="https://script.google.com/macros/s/...">
+      </div>
+      <div class="tip">
+        Paste your Google Apps Script Web App URL here. See setup guide at the bottom of this page.
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-placeholder" id="uploadPlaceholder">
+      <div class="icon">📇</div>
+      <p>Tap to photograph or upload<br>a business card</p>
+      <small>iPhone camera · gallery · any image</small>
+    </div>
+    <img id="preview" style="display:none" alt="Card preview">
+    <span class="change-hint" id="changeHint" style="display:none">tap to change</span>
+  </div>
+  <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none" onchange="handleFile(this)">
+
+  <!-- Progress -->
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+  <div class="status-line" id="statusLine"></div>
+
+  <!-- Scan button -->
+  <button class="btn btn-scan" id="scanBtn" onclick="scanCard()" style="display:none">
+    ✦ Scan Card
+  </button>
+
+  <!-- Alert -->
+  <div class="alert" id="alert"></div>
+
+  <!-- Extracted fields -->
+  <div id="fieldsSection" style="display:none">
+    <div class="fields-header">Extracted Data — Review &amp; Edit</div>
+    <div id="fieldsGrid"></div>
+    <div class="btn-row">
+      <button class="btn btn-save" onclick="saveToSheets()">💾 Save to Sheets</button>
+      <button class="btn btn-clear" onclick="clearAll()">✕</button>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="history-section" id="historySection" style="display:none">
+    <div class="history-header">
+      <span>Session History</span>
+      <span class="history-count" id="historyCount">0</span>
+    </div>
+    <div id="historyList"></div>
+  </div>
+
+  <!-- Instructions -->
+  <div class="instructions">
+    <h2>Google Sheets Setup</h2>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <div class="step-title">Create a Google Sheet</div>
+        <div class="step-detail">Go to sheets.google.com and create a new sheet. Name it "Business Cards". In row 1, add these headers:<br><br>
+          <strong>name · title · company · email · phone · website · address · scanned_at</strong>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <div class="step-title">Open Apps Script</div>
+        <div class="step-detail">In your Sheet: Extensions → Apps Script. Delete any existing code and paste this:</div>
+        <div class="code-block">function doPost(e) {
+  var sheet = SpreadsheetApp
+    .getActiveSpreadsheet()
+    .getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+  sheet.appendRow([
+    data.name    || "",
+    data.title   || "",
+    data.company || "",
+    data.email   || "",
+    data.phone   || "",
+    data.website || "",
+    data.address || "",
+    data.scanned_at || ""
+  ]);
+  return ContentService
+    .createTextOutput("OK");
+}</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <div class="step-title">Deploy as Web App</div>
+        <div class="step-detail">
+          Click <strong>Deploy → New Deployment</strong><br>
+          Type: <strong>Web App</strong><br>
+          Execute as: <strong>Me</strong><br>
+          Who has access: <strong>Anyone</strong><br>
+          Click Deploy → copy the <strong>Web App URL</strong>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div>
+        <div class="step-title">Paste URL in Setup above</div>
+        <div class="step-detail">Tap Setup at the top of this page and paste your Web App URL. You're ready to scan!</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const FIELDS = [
+    { key: "name",    label: "Full Name",  icon: "👤" },
+    { key: "title",   label: "Job Title",  icon: "💼" },
+    { key: "company", label: "Company",    icon: "🏢" },
+    { key: "email",   label: "Email",      icon: "✉️" },
+    { key: "phone",   label: "Phone",      icon: "📞" },
+    { key: "website", label: "Website",    icon: "🌐" },
+    { key: "address", label: "Address",    icon: "📍" },
+  ];
+
+  let currentCard = {};
+  let history = [];
+  let setupOpen = false;
+  let imageLoaded = false;
+
+  function toggleSetup() {
+    setupOpen = !setupOpen;
+    document.getElementById('setupInner').classList.toggle('hidden', !setupOpen);
+    document.getElementById('setupToggle').classList.toggle('open', setupOpen);
+  }
+
+  function handleFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const preview = document.getElementById('preview');
+    preview.src = url;
+    preview.style.display = 'block';
+    document.getElementById('uploadPlaceholder').style.display = 'none';
+    document.getElementById('changeHint').style.display = 'block';
+    document.getElementById('scanBtn').style.display = 'block';
+    document.getElementById('fieldsSection').style.display = 'none';
+    document.getElementById('alert').classList.remove('visible');
+    imageLoaded = true;
+    setStatus('');
+    setProgress(0);
+  }
+
+  async function scanCard() {
+    if (!imageLoaded) return showAlert('Please upload a card image first.', 'error');
+
+    document.getElementById('scanBtn').disabled = true;
+    document.getElementById('fieldsSection').style.display = 'none';
+    document.getElementById('progressBar').classList.add('visible');
+    setStatus('Initialising OCR engine…');
+    setProgress(5);
+
+    try {
+      const imgEl = document.getElementById('preview');
+
+      const result = await Tesseract.recognize(imgEl, 'eng', {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            setProgress(10 + Math.round(m.progress * 80));
+            setStatus('Reading card… ' + Math.round(m.progress * 100) + '%');
+          } else {
+            setStatus(m.status);
+          }
+        }
+      });
+
+      setProgress(95);
+      setStatus('Parsing fields…');
+
+      const text = result.data.text;
+      currentCard = parseCard(text);
+      renderFields(currentCard);
+
+      setProgress(100);
+      setStatus('Done ✓');
+      document.getElementById('fieldsSection').style.display = 'block';
+      setTimeout(() => {
+        document.getElementById('progressBar').classList.remove('visible');
+        setStatus('');
+      }, 1200);
+
+    } catch (err) {
+      showAlert('Scan failed: ' + err.message, 'error');
+      document.getElementById('progressBar').classList.remove('visible');
+      setStatus('');
+    }
+
+    document.getElementById('scanBtn').disabled = false;
+  }
+
+  function parseCard(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+    const emailRx = /[\w.+\-]+@[\w\-]+\.[\w.]+/i;
+    const phoneRx = /(\+?[\d\s\-().]{7,20})/;
+    const urlRx = /(?:https?:\/\/|www\.)[^\s]+/i;
+    const domainRx = /(?<![^\s])[\w\-]+\.(?:com|co\.uk|io|net|org|biz|info|co)[^\s]*/i;
+
+    let email = '', phone = '', website = '', name = '', title = '', company = '', address = '';
+
+    // Extract structured fields
+    for (const line of lines) {
+      if (!email && emailRx.test(line)) { email = line.match(emailRx)[0]; continue; }
+      if (!website && urlRx.test(line)) { website = line.match(urlRx)[0]; continue; }
+      if (!website && domainRx.test(line)) { website = line.match(domainRx)[0]; continue; }
+      if (!phone && phoneRx.test(line) && line.replace(/\D/g,'').length >= 7) {
+        const m = line.match(phoneRx);
+        if (m && m[0].replace(/\D/g,'').length >= 7) { phone = m[0].trim(); continue; }
+      }
+    }
+
+    // Remaining lines — heuristic name/title/company/address assignment
+    const remaining = lines.filter(l =>
+      !emailRx.test(l) && !urlRx.test(l) && !domainRx.test(l) &&
+      !(phoneRx.test(l) && l.replace(/\D/g,'').length >= 7)
+    );
+
+    const titleKeywords = /\b(director|manager|ceo|cto|cfo|founder|head|officer|president|vp|vice|senior|lead|engineer|developer|designer|consultant|analyst|executive|partner|associate|account|sales|marketing|hr|recruiter)\b/i;
+    const addressKeywords = /\b(\d{1,5}\s|\bstreet\b|\bst\b|\broad\b|\brd\b|\bavenue\b|\bave\b|\blane\b|\bln\b|\bdrive\b|\bdr\b|\bfloor\b|\bsuite\b|\bunit\b|\bpostcode\b|\bzip\b|\bpo box\b)/i;
+    const companyKeywords = /\b(ltd|llc|inc|plc|group|solutions|services|technologies|consulting|agency|studio|partners|associates|international|global)\b/i;
+
+    for (const line of remaining) {
+      if (!name && /^[A-Z][a-z]+ [A-Z][a-z]+/.test(line) && line.split(' ').length <= 4) {
+        name = line; continue;
+      }
+      if (!title && titleKeywords.test(line)) { title = line; continue; }
+      if (!address && addressKeywords.test(line)) { address = line; continue; }
+      if (!company && companyKeywords.test(line)) { company = line; continue; }
+      if (!company && line.length > 3 && line.length < 60 && !name) { name = line; continue; }
+      if (!company && line.length > 3 && line.length < 60) { company = line; }
+    }
+
+    return { name, title, company, email, phone, website, address };
+  }
+
+  function renderFields(card) {
+    const grid = document.getElementById('fieldsGrid');
+    grid.innerHTML = '';
+    FIELDS.forEach(({ key, label, icon }) => {
+      const div = document.createElement('div');
+      div.className = 'field-card';
+      div.innerHTML = `
+        <div class="field-label">${icon} ${label}</div>
+        <input class="field-input" type="text" data-key="${key}"
+          value="${(card[key]||'').replace(/"/g,'&quot;')}"
+          placeholder="Not found — type manually">
+      `;
+      grid.appendChild(div);
+    });
+    // Sync edits
+    grid.querySelectorAll('.field-input').forEach(inp => {
+      inp.addEventListener('input', () => { currentCard[inp.dataset.key] = inp.value; });
+    });
+  }
+
+  async function saveToSheets() {
+    const url = document.getElementById('sheetsUrl').value.trim();
+    if (!url) {
+      showAlert('Please enter your Google Apps Script URL in Setup first.', 'error');
+      toggleSetup();
+      return;
+    }
+    setStatus('Saving to Google Sheets…');
+    try {
+      await fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...currentCard, scanned_at: new Date().toISOString() })
+      });
+      history.unshift({ ...currentCard });
+      renderHistory();
+      showAlert('✓ Saved to Google Sheets!', 'success');
+      document.getElementById('fieldsSection').style.display = 'none';
+      clearImageArea();
+      setStatus('');
+    } catch (err) {
+      showAlert('Save failed — check your Apps Script URL.', 'error');
+      setStatus('');
+    }
+  }
+
+  function renderHistory() {
+    const section = document.getElementById('historySection');
+    const list = document.getElementById('historyList');
+    const count = document.getElementById('historyCount');
+    if (!history.length) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+    count.textContent = history.length;
+    list.innerHTML = history.map(h => `
+      <div class="history-item">
+        <div class="history-name">${h.name || '—'}</div>
+        <div class="history-sub">${[h.title, h.company].filter(Boolean).join(' · ') || ''}</div>
+        ${h.email ? `<div class="history-email">${h.email}</div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  function clearImageArea() {
+    const preview = document.getElementById('preview');
+    preview.src = ''; preview.style.display = 'none';
+    document.getElementById('uploadPlaceholder').style.display = 'block';
+    document.getElementById('changeHint').style.display = 'none';
+    document.getElementById('scanBtn').style.display = 'none';
+    document.getElementById('fileInput').value = '';
+    imageLoaded = false;
+    currentCard = {};
+  }
+
+  function clearAll() {
+    clearImageArea();
+    document.getElementById('fieldsSection').style.display = 'none';
+    document.getElementById('alert').classList.remove('visible');
+    setStatus(''); setProgress(0);
+    document.getElementById('progressBar').classList.remove('visible');
+  }
+
+  function setStatus(msg) { document.getElementById('statusLine').textContent = msg; }
+  function setProgress(pct) { document.getElementById('progressFill').style.width = pct + '%'; }
+
+  function showAlert(msg, type) {
+    const el = document.getElementById('alert');
+    el.textContent = msg;
+    el.className = `alert visible alert-${type}`;
+  }
+</script>
+</body>
+</html>
